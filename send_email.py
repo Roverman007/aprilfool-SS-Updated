@@ -5,17 +5,12 @@ import yfinance as yf
 import pandas as pd
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from dotenv import load_dotenv
-
-# Load environment variables from .env (for local testing)
-load_dotenv()
 
 # === Email Settings ===
 FROM_EMAIL = "roverpoonhkg@gmail.com"
 TO_EMAIL = "klauspoon@gmail.com"
 APP_PASSWORD = "rbmk opks bdex ajzr"
 
-# === Email Function ===
 def send_email(subject, body, to_email):
     if not FROM_EMAIL or not TO_EMAIL or not APP_PASSWORD:
         print("❌ Missing email credentials. Email not sent.")
@@ -26,26 +21,25 @@ def send_email(subject, body, to_email):
     msg["To"] = to_email
     msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
+
     try:
         server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
         server.login(FROM_EMAIL, APP_PASSWORD)
         server.sendmail(FROM_EMAIL, to_email, msg.as_string())
         server.quit()
-        print("Email sent successfully.")
+        print("✅ Email sent successfully.")
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-# === RSI Calculation ===
+# === Technical Indicators ===
 def compute_rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0).rolling(window=period).mean()
     loss = -delta.clip(upper=0).rolling(window=period).mean()
     rs = gain / loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi.astype(float)
+    return (100 - (100 / (1 + rs))).astype(float)
 
-# === MACD Calculation ===
 def compute_macd(series):
     ema12 = series.ewm(span=12, adjust=False).mean()
     ema26 = series.ewm(span=26, adjust=False).mean()
@@ -53,7 +47,6 @@ def compute_macd(series):
     signal = macd.ewm(span=9, adjust=False).mean()
     return macd.astype(float), signal.astype(float)
 
-# === ADX Calculation (Stable 1D Series) ===
 def compute_adx(df, period=14):
     high = df['High']
     low = df['Low']
@@ -80,7 +73,7 @@ def compute_adx(df, period=14):
     adx = dx.rolling(window=period).mean()
     return pd.Series(adx.values.ravel(), index=df.index, name='ADX').astype(float)
 
-# === Main Strategy ===
+# === Strategy Logic ===
 def check_strategy():
     df = yf.download("SQQQ", period="90d", interval="1d", auto_adjust=False)
 
@@ -95,16 +88,21 @@ def check_strategy():
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
     df["ADX"] = compute_adx(df)
 
-    required_columns = ["RSI", "MACD", "Signal", "ADX", "EMA5", "EMA10", "EMA20", "Close"]
-    df = df[[col for col in required_columns if col in df.columns]].dropna()
+    df = df[["Close", "RSI", "MACD", "Signal", "ADX", "EMA5", "EMA10", "EMA20"]].dropna()
+    today = datetime.date.today()
+
+    summary = {
+        "type": "No Signal",
+        "date": today,
+        "price": None,
+        "reason": "",
+    }
 
     position = None
-    no_trigger = True
 
     for i in range(1, len(df)):
         row = df.iloc[i]
         date = row.name.date()
-
         close_price = row["Close"].item()
         ema20_price = row["EMA20"].item()
 
@@ -121,50 +119,60 @@ def check_strategy():
             signals.append("ADX > 20")
 
         if position is None and len(signals) >= 2:
-            position = {
-                "Buy Price": close_price,
-                "Buy Date": date,
-                "Buy Reason": ", ".join(signals)
-            }
-            send_email("SQQQ 買入訊號",
-                       f"✅【買入】\n📅 日期：{date}\n💰 價格：{close_price:.2f}\n📌 原因：{position['Buy Reason']}",
-                       TO_EMAIL)
-            no_trigger = False
-            continue
+            summary.update({
+                "type": "Buy",
+                "date": date,
+                "price": close_price,
+                "reason": ", ".join(signals),
+            })
+            break
 
         if position is not None:
             buy_price = position["Buy Price"]
             gain = (close_price - buy_price) / buy_price
 
             if gain <= -0.075:
-                send_email("SQQQ 賣出訊號",
-                           f"❌【止損】\n📅 日期：{date}\n💰 價格：{close_price:.2f}\n📉 損失：{gain * 100:.1f}%",
-                           TO_EMAIL)
-                position = None
-                no_trigger = False
-                continue
+                summary.update({
+                    "type": "Sell (Stop Loss)",
+                    "date": date,
+                    "price": close_price,
+                    "reason": f"Loss: {gain * 100:.1f}%",
+                })
+                break
 
             if gain >= 0.10:
-                send_email("SQQQ 賣出訊號",
-                           f"✅【止盈】\n📅 日期：{date}\n💰 價格：{close_price:.2f}\n📈 獲利：{gain * 100:.1f}%",
-                           TO_EMAIL)
-                position = None
-                no_trigger = False
-                continue
+                summary.update({
+                    "type": "Sell (Take Profit)",
+                    "date": date,
+                    "price": close_price,
+                    "reason": f"Gain: {gain * 100:.1f}%",
+                })
+                break
 
             prev_close = df["Close"].iloc[i - 1].item()
             prev_ema20 = df["EMA20"].iloc[i - 1].item()
 
             if prev_close > prev_ema20 and close_price > ema20_price:
-                send_email("SQQQ 賣出訊號",
-                           f"📈【EMA20突破賣出】\n📅 日期：{date}\n💰 價格：{close_price:.2f}\n📌 原因：連續兩日收盤 > EMA20",
-                           TO_EMAIL)
-                position = None
-                no_trigger = False
+                summary.update({
+                    "type": "Sell (EMA20 Break)",
+                    "date": date,
+                    "price": close_price,
+                    "reason": "Close > EMA20 for 2 days",
+                })
+                break
 
-    if no_trigger:
-        today = datetime.date.today()
-        send_email("SQQQ 無訊號", f"📋 今天（{today}）未觸發任何買入或賣出訊號。", TO_EMAIL)
+    # === Send One Summary Email ===
+    if summary["type"] == "Buy":
+        subject = "SQQQ 買入訊號"
+        body = f"✅【買入】\n📅 日期：{summary['date']}\n💰 價格：{summary['price']:.2f}\n📌 原因：{summary['reason']}"
+    elif summary["type"].startswith("Sell"):
+        subject = "SQQQ 賣出訊號"
+        body = f"❌【賣出】\n📅 日期：{summary['date']}\n💰 價格：{summary['price']:.2f}\n📌 原因：{summary['reason']}"
+    else:
+        subject = "SQQQ 無訊號"
+        body = f"📋 今天（{today}）未觸發任何買入或賣出訊號。"
+
+    send_email(subject, body, TO_EMAIL)
 
 # === Execute ===
 check_strategy()
