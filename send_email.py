@@ -62,7 +62,7 @@ def compute_adx(df, period=14):
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
     adx = dx.rolling(window=period).mean()
 
-    return adx  # ✅ 正確：只回傳 Series
+    return pd.DataFrame({"ADX": adx})  # ✅ 回傳 DataFrame，但主程式中取單欄位
 
 # === 主策略 ===
 def check_strategy():
@@ -77,7 +77,7 @@ def check_strategy():
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["RSI"] = compute_rsi(df["Close"])
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
-    df["ADX"] = compute_adx(df)  # ✅ 不再報錯
+    df["ADX"] = compute_adx(df)["ADX"]  # ✅ 修正這裡：只取出單欄位
 
     position = None
     no_trigger = True
