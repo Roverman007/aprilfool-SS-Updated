@@ -6,7 +6,7 @@ import pandas as pd
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# === Email Settings ===
+# === Email 設定 ===
 FROM_EMAIL = "roverpoonhkg@gmail.com"
 TO_EMAIL = "klauspoon@gmail.com"
 APP_PASSWORD = "rbmk opks bdex ajzr"
@@ -32,7 +32,7 @@ def send_email(subject, body, to_email):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-# === Technical Indicators ===
+# === RSI 計算 ===
 def compute_rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0).rolling(window=period).mean()
@@ -40,6 +40,7 @@ def compute_rsi(series, period=14):
     rs = gain / loss
     return (100 - (100 / (1 + rs))).astype(float)
 
+# === MACD 計算 ===
 def compute_macd(series):
     ema12 = series.ewm(span=12, adjust=False).mean()
     ema26 = series.ewm(span=26, adjust=False).mean()
@@ -47,6 +48,7 @@ def compute_macd(series):
     signal = macd.ewm(span=9, adjust=False).mean()
     return macd.astype(float), signal.astype(float)
 
+# === ADX 計算 ===
 def compute_adx(df, period=14):
     high = df['High']
     low = df['Low']
@@ -73,12 +75,12 @@ def compute_adx(df, period=14):
     adx = dx.rolling(window=period).mean()
     return pd.Series(adx.values.ravel(), index=df.index, name='ADX').astype(float)
 
-# === Main Strategy for Today ===
-def check_today_signal():
-    df = yf.download("SQQQ", period="90d", interval="1d", auto_adjust=False)
+# === 主策略：分析最新一支5分鐘K線 ===
+def check_intraday_signal():
+    df = yf.download("SQQQ", period="2d", interval="5m", prepost=True)
 
-    if df.empty or len(df) < 30:
-        send_email("SQQQ 策略錯誤", "無足夠資料執行策略。", TO_EMAIL)
+    if df.empty or len(df) < 50:
+        send_email("SQQQ 策略錯誤", "無足夠資料執行策略（5分鐘級別）。", TO_EMAIL)
         return
 
     df["EMA5"] = df["Close"].ewm(span=5).mean()
@@ -90,14 +92,12 @@ def check_today_signal():
 
     df = df.dropna().copy()
     if df.empty:
-        send_email("SQQQ 策略錯誤", "技術指標計算後資料為空。", TO_EMAIL)
+        send_email("SQQQ 策略錯誤", "指標計算後資料為空（可能過早執行）。", TO_EMAIL)
         return
 
-    # Get the last row as a Series
     row = df.iloc[-1]
-    date = row.name.date()
+    timestamp = row.name
 
-    # Safely extract scalar values using .item() only if needed
     def safe_scalar(val):
         return val.item() if isinstance(val, pd.Series) else val
 
@@ -123,18 +123,18 @@ def check_today_signal():
         signals.append("ADX > 20")
 
     if len(signals) >= 2:
-        subject = "SQQQ 買入訊號"
+        subject = "📈 SQQQ 即時買入訊號"
         body = (
-            f"✅【今日買入訊號】\n"
-            f"📅 日期：{date}\n"
+            f"✅【5分鐘級別 買入訊號】\n"
+            f"🕒 時間：{timestamp}\n"
             f"💰 價格：{close:.2f}\n"
             f"📌 訊號條件：{', '.join(signals)}"
         )
     else:
-        subject = "SQQQ 無訊號"
-        body = f"📋 今天（{date}）未觸發任何買入或賣出訊號。"
+        subject = "SQQQ 無即時訊號"
+        body = f"📋 {timestamp} 沒有觸發任何買入或賣出訊號。"
 
     send_email(subject, body, TO_EMAIL)
 
-# === Execute Strategy ===
-check_today_signal()
+# === 執行策略 ===
+check_intraday_signal()
