@@ -55,6 +55,9 @@ def compute_adx(df, period=14):
     plus_dm = high.diff()
     minus_dm = low.diff()
 
+    plus_dm[plus_dm < minus_dm] = 0
+    minus_dm[minus_dm < plus_dm] = 0
+
     tr1 = (high - low).abs()
     tr2 = (high - close.shift()).abs()
     tr3 = (low - close.shift()).abs()
@@ -66,7 +69,7 @@ def compute_adx(df, period=14):
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
     adx = dx.rolling(window=period).mean()
 
-    return pd.Series(adx, index=df.index, name="ADX")
+    return adx
 
 # === Main Strategy ===
 def check_strategy():
