@@ -94,9 +94,8 @@ def check_strategy():
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
     df["ADX"] = compute_adx(df)
 
-    required_columns = ["RSI", "MACD", "Signal", "ADX", "EMA5", "EMA10", "EMA20"]
-    df = df[[col for col in required_columns if col in df.columns]]
-    df.dropna(inplace=True)
+    required_columns = ["RSI", "MACD", "Signal", "ADX", "EMA5", "EMA10", "EMA20", "Close"]
+    df = df[[col for col in required_columns if col in df.columns]].dropna()
 
     position = None
     no_trigger = True
@@ -106,20 +105,20 @@ def check_strategy():
         date = row.name.date()
 
         signals = []
-        if float(row["RSI"]) > 60:
+        if row["RSI"].item() > 60:
             signals.append("RSI > 60")
-        if float(row["MACD"]) < float(row["Signal"]):
+        if row["MACD"].item() < row["Signal"].item():
             signals.append("MACD < Signal")
-        if float(row["EMA5"]) < float(row["EMA10"]):
+        if row["EMA5"].item() < row["EMA10"].item():
             signals.append("EMA5 < EMA10")
-        if float(row["Close"]) < float(row["EMA20"]):
+        if row["Close"].item() < row["EMA20"].item():
             signals.append("Close < EMA20")
-        if float(row["ADX"]) > 20:
+        if row["ADX"].item() > 20:
             signals.append("ADX > 20")
 
         if position is None and len(signals) >= 2:
             position = {
-                "Buy Price": row["Close"],
+                "Buy Price": row["Close"].item(),
                 "Buy Date": date,
                 "Buy Reason": ", ".join(signals)
             }
@@ -131,7 +130,7 @@ def check_strategy():
 
         if position is not None:
             buy_price = position["Buy Price"]
-            gain = (row["Close"] - buy_price) / buy_price
+            gain = (row["Close"].item() - buy_price) / buy_price
 
             if gain <= -0.075:
                 send_email("SQQQ 賣出訊號",
@@ -151,7 +150,7 @@ def check_strategy():
 
             if (
                 df["Close"].iloc[i - 1] > df["EMA20"].iloc[i - 1] and
-                row["Close"] > row["EMA20"]
+                row["Close"].item() > row["EMA20"].item()
             ):
                 send_email("SQQQ 賣出訊號",
                            f"📈【EMA20突破賣出】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📌 原因：連續兩日收盤 > EMA20",
