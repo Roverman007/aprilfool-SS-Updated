@@ -8,9 +8,8 @@ import datetime
 # === Email 設定 ===
 FROM_EMAIL = "roverpoonhkg@gmail.com"
 TO_EMAIL = "klauspoon@gmail.com"
-APP_PASSWORD = "phly lbfi yayh glut"  # Gmail App 密碼
+APP_PASSWORD = "phly lbfi yayh glut"
 
-# === 發送 Email 函數 ===
 def send_email(subject, body, to_email):
     msg = MIMEMultipart()
     msg["From"] = FROM_EMAIL
@@ -28,7 +27,7 @@ def send_email(subject, body, to_email):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-# === RSI 計算 ===
+# RSI
 def compute_rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0).rolling(window=period).mean()
@@ -36,7 +35,7 @@ def compute_rsi(series, period=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# === MACD 計算 ===
+# MACD
 def compute_macd(series):
     ema12 = series.ewm(span=12, adjust=False).mean()
     ema26 = series.ewm(span=26, adjust=False).mean()
@@ -44,7 +43,7 @@ def compute_macd(series):
     signal = macd.ewm(span=9, adjust=False).mean()
     return macd, signal
 
-# === ADX 計算 ===
+# ADX
 def compute_adx(df, period=14):
     high = df["High"]
     low = df["Low"]
@@ -61,9 +60,9 @@ def compute_adx(df, period=14):
     minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
     adx = dx.rolling(window=period).mean()
-    return adx  # 確保只回傳 Series
+    return pd.DataFrame({"ADX": adx})  # 回傳為 DataFrame
 
-# === 主策略邏輯 ===
+# 主策略
 def check_strategy():
     df = yf.download("SQQQ", period="90d", interval="1d", auto_adjust=False)
 
@@ -76,7 +75,9 @@ def check_strategy():
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["RSI"] = compute_rsi(df["Close"])
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
-    df["ADX"] = compute_adx(df)
+
+    adx_df = compute_adx(df)
+    df["ADX"] = adx_df["ADX"]
 
     position = None
     no_trigger = True
@@ -87,8 +88,6 @@ def check_strategy():
         date = row.name.date()
 
         signals = []
-
-        # === 買入條件（任選2項）
         if row["RSI"] > 60:
             signals.append("RSI > 60")
         if row["MACD"] < row["Signal"]:
@@ -100,7 +99,7 @@ def check_strategy():
         if not pd.isna(row["ADX"]) and row["ADX"] > 20:
             signals.append("ADX > 20")
 
-        # === 觸發買入
+        # 觸發買入
         if position is None and len(signals) >= 2:
             position = {
                 "Buy Price": row["Close"],
@@ -112,9 +111,9 @@ def check_strategy():
                        f"✅ 【買入】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📌 原因：{position['Buy Reason']}",
                        TO_EMAIL)
             no_trigger = False
-            continue  # 避免當天同時賣出
+            continue
 
-        # === 賣出條件
+        # 觸發賣出
         if position is not None:
             buy_price = position["Buy Price"]
             gain = (row["Close"] - buy_price) / buy_price
@@ -136,9 +135,9 @@ def check_strategy():
                 continue
 
             if (
-                i >= 1
-                and df["Close"].iloc[i - 1] > df["EMA20"].iloc[i - 1]
-                and row["Close"] > row["EMA20"]
+                i >= 1 and
+                df["Close"].iloc[i - 1] > df["EMA20"].iloc[i - 1] and
+                row["Close"] > row["EMA20"]
             ):
                 send_email("SQQQ 賣出訊號",
                            f"📈 【賣出】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📌 原因：連續2日收盤 > EMA20",
@@ -146,11 +145,12 @@ def check_strategy():
                 position = None
                 no_trigger = False
 
+    # 若沒有觸發任何訊號
     if no_trigger:
         today = datetime.date.today()
         send_email("SQQQ 無訊號",
                    f"📋 今天（{today}）未觸發任何買入或賣出訊號。",
                    TO_EMAIL)
 
-# === 執行策略 ===
+# 執行策略
 check_strategy()
