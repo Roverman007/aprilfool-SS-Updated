@@ -11,9 +11,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # === Email Settings ===
-FROM_EMAIL = os.getenv("FROM_EMAIL")
-TO_EMAIL = os.getenv("TO_EMAIL")
-APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
+FROM_EMAIL = "roverpoonhkg@gmail.com"
+TO_EMAIL = "klauspoon@gmail.com"
+APP_PASSWORD = "rbmk opks bdex ajzr"
 
 # === Email Function ===
 def send_email(subject, body, to_email):
