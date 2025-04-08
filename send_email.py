@@ -60,7 +60,7 @@ def compute_adx(df, period=14):
     minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
     adx = dx.rolling(window=period).mean()
-    return pd.DataFrame({"ADX": adx})  # 回傳為 DataFrame
+    return adx  # ✅ 直接回傳 Series
 
 # 主策略
 def check_strategy():
@@ -75,9 +75,7 @@ def check_strategy():
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["RSI"] = compute_rsi(df["Close"])
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
-
-    adx_df = compute_adx(df)
-    df["ADX"] = adx_df["ADX"]
+    df["ADX"] = compute_adx(df)
 
     position = None
     no_trigger = True
@@ -99,7 +97,7 @@ def check_strategy():
         if not pd.isna(row["ADX"]) and row["ADX"] > 20:
             signals.append("ADX > 20")
 
-        # 觸發買入
+        # === 買入條件：滿足任意兩項
         if position is None and len(signals) >= 2:
             position = {
                 "Buy Price": row["Close"],
@@ -113,7 +111,7 @@ def check_strategy():
             no_trigger = False
             continue
 
-        # 觸發賣出
+        # === 賣出條件
         if position is not None:
             buy_price = position["Buy Price"]
             gain = (row["Close"] - buy_price) / buy_price
@@ -145,7 +143,7 @@ def check_strategy():
                 position = None
                 no_trigger = False
 
-    # 若沒有觸發任何訊號
+    # 沒有任何訊號也通知
     if no_trigger:
         today = datetime.date.today()
         send_email("SQQQ 無訊號",
