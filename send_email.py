@@ -15,7 +15,12 @@ FROM_EMAIL = os.getenv("FROM_EMAIL")
 TO_EMAIL = os.getenv("TO_EMAIL")
 APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
 
+# === Email Function ===
 def send_email(subject, body, to_email):
+    if not FROM_EMAIL or not TO_EMAIL or not APP_PASSWORD:
+        print("❌ Missing email credentials. Email not sent.")
+        return
+
     msg = MIMEMultipart()
     msg["From"] = FROM_EMAIL
     msg["To"] = to_email
@@ -66,18 +71,14 @@ def compute_adx(df, period=14):
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
 
     atr = tr.rolling(window=period).mean()
-
     plus_di = plus_dm.rolling(window=period).mean()
     minus_di = minus_dm.rolling(window=period).mean()
 
     sum_di = plus_di + minus_di
     sum_di[sum_di == 0] = 1e-10
-
     dx = 100 * (plus_di - minus_di).abs() / sum_di
     adx = dx.rolling(window=period).mean()
-
-    adx = pd.Series(adx.values.ravel(), index=df.index, name='ADX')
-    return adx.astype(float)
+    return pd.Series(adx.values.ravel(), index=df.index, name='ADX').astype(float)
 
 # === Main Strategy ===
 def check_strategy():
@@ -151,10 +152,10 @@ def check_strategy():
                 no_trigger = False
                 continue
 
-            if (
-                df["Close"].iloc[i - 1] > df["EMA20"].iloc[i - 1] and
-                close_price > ema20_price
-            ):
+            prev_close = df["Close"].iloc[i - 1].item()
+            prev_ema20 = df["EMA20"].iloc[i - 1].item()
+
+            if prev_close > prev_ema20 and close_price > ema20_price:
                 send_email("SQQQ 賣出訊號",
                            f"📈【EMA20突破賣出】\n📅 日期：{date}\n💰 價格：{close_price:.2f}\n📌 原因：連續兩日收盤 > EMA20",
                            TO_EMAIL)
