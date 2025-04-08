@@ -34,7 +34,7 @@ def send_email(subject, body, to_email):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-# === 技術指標 ===
+# === 技術指標計算 ===
 def compute_rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0).rolling(window=period).mean()
@@ -124,25 +124,37 @@ def check_intraday_strategy():
 
     # === 檢查持倉紀錄 ===
     position = None
-    if os.path.exists(POSITION_FILE):
-        with open(POSITION_FILE) as f:
+    if os.path.exists("position.json"):
+        with open("position.json") as f:
             position = json.load(f)
 
-    # === 賣出策略 ===
+    # === 賣出邏輯 ===
     if position:
         buy_price = position["buy_price"]
         gain = (close - buy_price) / buy_price
+
+        prev_close = df["Close"].iloc[-2]
+        prev_ema20 = df["EMA20"].iloc[-2]
+
         if gain <= -0.075:
             send_email("❌ SQQQ 止損賣出",
                        f"❌【止損】\n🕒 時間：{timestamp}\n💰 價格：{close:.2f}\n📉 損失：{gain*100:.1f}%",
                        TO_EMAIL)
-            os.remove(POSITION_FILE)
+            os.remove("position.json")
             return
+
         elif gain >= 0.10:
             send_email("✅ SQQQ 止盈賣出",
                        f"✅【止盈】\n🕒 時間：{timestamp}\n💰 價格：{close:.2f}\n📈 獲利：{gain*100:.1f}%",
                        TO_EMAIL)
-            os.remove(POSITION_FILE)
+            os.remove("position.json")
+            return
+
+        elif prev_close > prev_ema20 and close > ema20:
+            send_email("📈 SQQQ EMA20 連續突破賣出",
+                       f"📈【連續兩根K線突破 EMA20 賣出】\n🕒 時間：{timestamp}\n💰 價格：{close:.2f}",
+                       TO_EMAIL)
+            os.remove("position.json")
             return
 
     # === 買入策略 ===
@@ -153,7 +165,7 @@ def check_intraday_strategy():
             "buy_time": str(timestamp),
             "reason": ", ".join(signals)
         }
-        with open(POSITION_FILE, "w") as f:
+        with open("position.json", "w") as f:
             json.dump(new_position, f)
 
         send_email("📈 SQQQ 即時買入訊號",
