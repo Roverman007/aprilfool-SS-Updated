@@ -89,22 +89,23 @@ def check_today_signal():
     df["ADX"] = compute_adx(df)
 
     df = df.dropna().copy()
-    if len(df) == 0:
+    if df.empty:
         send_email("SQQQ 策略錯誤", "技術指標計算後資料為空。", TO_EMAIL)
         return
 
-    today_row = df.iloc[[-1]]  # always returns a DataFrame with one row
-    date = today_row.index[0].date()
+    # Use last row as a Series
+    latest = df.iloc[-1]
+    date = latest.name.date()
 
-    # Extract all values as scalars using .iloc[0]
-    rsi = today_row["RSI"].iloc[0]
-    macd = today_row["MACD"].iloc[0]
-    signal = today_row["Signal"].iloc[0]
-    ema5 = today_row["EMA5"].iloc[0]
-    ema10 = today_row["EMA10"].iloc[0]
-    ema20 = today_row["EMA20"].iloc[0]
-    close = today_row["Close"].iloc[0]
-    adx = today_row["ADX"].iloc[0]
+    # Extract scalars directly
+    close = latest["Close"]
+    ema5 = latest["EMA5"]
+    ema10 = latest["EMA10"]
+    ema20 = latest["EMA20"]
+    rsi = latest["RSI"]
+    macd = latest["MACD"]
+    signal = latest["Signal"]
+    adx = latest["ADX"]
 
     signals = []
     if rsi > 60:
@@ -132,5 +133,5 @@ def check_today_signal():
 
     send_email(subject, body, TO_EMAIL)
 
-# === Run Today's Strategy ===
+# === Execute ===
 check_today_signal()
