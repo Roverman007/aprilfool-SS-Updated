@@ -104,6 +104,9 @@ def check_strategy():
         row = df.iloc[i]
         date = row.name.date()
 
+        close_price = row["Close"].item()
+        ema20_price = row["EMA20"].item()
+
         signals = []
         if row["RSI"].item() > 60:
             signals.append("RSI > 60")
@@ -111,30 +114,30 @@ def check_strategy():
             signals.append("MACD < Signal")
         if row["EMA5"].item() < row["EMA10"].item():
             signals.append("EMA5 < EMA10")
-        if row["Close"].item() < row["EMA20"].item():
+        if close_price < ema20_price:
             signals.append("Close < EMA20")
         if row["ADX"].item() > 20:
             signals.append("ADX > 20")
 
         if position is None and len(signals) >= 2:
             position = {
-                "Buy Price": row["Close"].item(),
+                "Buy Price": close_price,
                 "Buy Date": date,
                 "Buy Reason": ", ".join(signals)
             }
             send_email("SQQQ 買入訊號",
-                       f"✅【買入】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📌 原因：{position['Buy Reason']}",
+                       f"✅【買入】\n📅 日期：{date}\n💰 價格：{close_price:.2f}\n📌 原因：{position['Buy Reason']}",
                        TO_EMAIL)
             no_trigger = False
             continue
 
         if position is not None:
             buy_price = position["Buy Price"]
-            gain = (row["Close"].item() - buy_price) / buy_price
+            gain = (close_price - buy_price) / buy_price
 
             if gain <= -0.075:
                 send_email("SQQQ 賣出訊號",
-                           f"❌【止損】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📉 損失：{gain * 100:.1f}%",
+                           f"❌【止損】\n📅 日期：{date}\n💰 價格：{close_price:.2f}\n📉 損失：{gain * 100:.1f}%",
                            TO_EMAIL)
                 position = None
                 no_trigger = False
@@ -142,7 +145,7 @@ def check_strategy():
 
             if gain >= 0.10:
                 send_email("SQQQ 賣出訊號",
-                           f"✅【止盈】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📈 獲利：{gain * 100:.1f}%",
+                           f"✅【止盈】\n📅 日期：{date}\n💰 價格：{close_price:.2f}\n📈 獲利：{gain * 100:.1f}%",
                            TO_EMAIL)
                 position = None
                 no_trigger = False
@@ -150,10 +153,10 @@ def check_strategy():
 
             if (
                 df["Close"].iloc[i - 1] > df["EMA20"].iloc[i - 1] and
-                row["Close"].item() > row["EMA20"].item()
+                close_price > ema20_price
             ):
                 send_email("SQQQ 賣出訊號",
-                           f"📈【EMA20突破賣出】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📌 原因：連續兩日收盤 > EMA20",
+                           f"📈【EMA20突破賣出】\n📅 日期：{date}\n💰 價格：{close_price:.2f}\n📌 原因：連續兩日收盤 > EMA20",
                            TO_EMAIL)
                 position = None
                 no_trigger = False
