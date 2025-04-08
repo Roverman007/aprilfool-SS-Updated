@@ -23,7 +23,7 @@ def send_email(subject, body, to_email):
     msg.attach(MIMEText(body, "plain"))
 
     try:
-        server = smtplib.SMtplib("smtp.gmail.com", 587)
+        server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
         server.login(FROM_EMAIL, APP_PASSWORD)
         server.sendmail(FROM_EMAIL, to_email, msg.as_string())
@@ -73,7 +73,7 @@ def compute_adx(df, period=14):
     adx = dx.rolling(window=period).mean()
     return pd.Series(adx.values.ravel(), index=df.index, name='ADX').astype(float)
 
-# === Strategy Logic for Today's Data Only ===
+# === Today's Strategy ===
 def check_today_signal():
     df = yf.download("SQQQ", period="90d", interval="1d", auto_adjust=False)
 
@@ -81,7 +81,6 @@ def check_today_signal():
         send_email("SQQQ 策略錯誤", "無足夠資料執行策略。", TO_EMAIL)
         return
 
-    # Add indicators
     df["EMA5"] = df["Close"].ewm(span=5).mean()
     df["EMA10"] = df["Close"].ewm(span=10).mean()
     df["EMA20"] = df["Close"].ewm(span=20).mean()
@@ -90,26 +89,35 @@ def check_today_signal():
     df["ADX"] = compute_adx(df)
 
     df = df.dropna().copy()
+    if len(df) == 0:
+        send_email("SQQQ 策略錯誤", "技術指標計算後資料為空。", TO_EMAIL)
+        return
 
-    today_row = df.iloc[-1]
-    date = today_row.name.date()
-    close = today_row["Close"]
-    ema20 = today_row["EMA20"]
+    today_row = df.iloc[[-1]]  # always returns a DataFrame with one row
+    date = today_row.index[0].date()
+
+    # Extract all values as scalars using .iloc[0]
+    rsi = today_row["RSI"].iloc[0]
+    macd = today_row["MACD"].iloc[0]
+    signal = today_row["Signal"].iloc[0]
+    ema5 = today_row["EMA5"].iloc[0]
+    ema10 = today_row["EMA10"].iloc[0]
+    ema20 = today_row["EMA20"].iloc[0]
+    close = today_row["Close"].iloc[0]
+    adx = today_row["ADX"].iloc[0]
 
     signals = []
-
-    if today_row["RSI"] > 60:
+    if rsi > 60:
         signals.append("RSI > 60")
-    if today_row["MACD"] < today_row["Signal"]:
+    if macd < signal:
         signals.append("MACD < Signal")
-    if today_row["EMA5"] < today_row["EMA10"]:
+    if ema5 < ema10:
         signals.append("EMA5 < EMA10")
     if close < ema20:
         signals.append("Close < EMA20")
-    if today_row["ADX"] > 20:
+    if adx > 20:
         signals.append("ADX > 20")
 
-    # Determine signal type and send single email
     if len(signals) >= 2:
         subject = "SQQQ 買入訊號"
         body = (
@@ -124,5 +132,5 @@ def check_today_signal():
 
     send_email(subject, body, TO_EMAIL)
 
-# === Run Strategy for Today ===
+# === Run Today's Strategy ===
 check_today_signal()
