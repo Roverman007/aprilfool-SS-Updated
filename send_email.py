@@ -37,7 +37,8 @@ def compute_rsi(series, period=14):
     gain = delta.clip(lower=0).rolling(window=period).mean()
     loss = -delta.clip(upper=0).rolling(window=period).mean()
     rs = gain / loss
-    return 100 - (100 / (1 + rs))
+    rsi = 100 - (100 / (1 + rs))
+    return rsi.astype(float)
 
 # === MACD Calculation ===
 def compute_macd(series):
@@ -45,7 +46,7 @@ def compute_macd(series):
     ema26 = series.ewm(span=26, adjust=False).mean()
     macd = ema12 - ema26
     signal = macd.ewm(span=9, adjust=False).mean()
-    return macd, signal
+    return macd.astype(float), signal.astype(float)
 
 # === ADX Calculation (Stable 1D Series) ===
 def compute_adx(df, period=14):
@@ -76,7 +77,7 @@ def compute_adx(df, period=14):
     adx = dx.rolling(window=period).mean()
 
     adx = pd.Series(adx.values.ravel(), index=df.index, name='ADX')
-    return adx
+    return adx.astype(float)
 
 # === Main Strategy ===
 def check_strategy():
@@ -93,23 +94,25 @@ def check_strategy():
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
     df["ADX"] = compute_adx(df)
 
+    df = df.dropna(subset=["RSI", "MACD", "Signal", "ADX", "EMA5", "EMA10", "EMA20"])
+
     position = None
     no_trigger = True
 
-    for i in range(20, len(df)):
+    for i in range(1, len(df)):
         row = df.iloc[i]
         date = row.name.date()
 
         signals = []
-        if row["RSI"] > 60:
+        if float(row["RSI"]) > 60:
             signals.append("RSI > 60")
-        if row["MACD"] < row["Signal"]:
+        if float(row["MACD"]) < float(row["Signal"]):
             signals.append("MACD < Signal")
-        if row["EMA5"] < row["EMA10"]:
+        if float(row["EMA5"]) < float(row["EMA10"]):
             signals.append("EMA5 < EMA10")
-        if row["Close"] < row["EMA20"]:
+        if float(row["Close"]) < float(row["EMA20"]):
             signals.append("Close < EMA20")
-        if pd.notna(row["ADX"]) and row["ADX"] > 20:
+        if float(row["ADX"]) > 20:
             signals.append("ADX > 20")
 
         if position is None and len(signals) >= 2:
@@ -145,9 +148,8 @@ def check_strategy():
                 continue
 
             if (
-                i >= 1 and
                 df["Close"].iloc[i - 1] > df["EMA20"].iloc[i - 1] and
-                row["Close"] > df["EMA20"]
+                row["Close"] > row["EMA20"]
             ):
                 send_email("SQQQ 賣出訊號",
                            f"📈【EMA20突破賣出】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📌 原因：連續兩日收盤 > EMA20",
