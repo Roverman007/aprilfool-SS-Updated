@@ -42,11 +42,11 @@ def compute_macd(series):
     signal = macd.ewm(span=9, adjust=False).mean()
     return macd, signal
 
-# === ADX 回傳為 Series ✅
+# === ADX ===
 def compute_adx(df, period=14):
-    high = df["High"]
-    low = df["Low"]
-    close = df["Close"]
+    high = df['High']
+    low = df['Low']
+    close = df['Close']
 
     plus_dm = high.diff()
     minus_dm = low.diff()
@@ -55,7 +55,6 @@ def compute_adx(df, period=14):
     tr2 = (high - close.shift()).abs()
     tr3 = (low - close.shift()).abs()
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-
     atr = tr.rolling(window=period).mean()
 
     plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
@@ -63,7 +62,7 @@ def compute_adx(df, period=14):
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
     adx = dx.rolling(window=period).mean()
 
-    return adx  # ✅ 回傳 Series，不再報錯
+    return adx  # ✅ 正確：只回傳 Series
 
 # === 主策略 ===
 def check_strategy():
@@ -78,7 +77,7 @@ def check_strategy():
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["RSI"] = compute_rsi(df["Close"])
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
-    df["ADX"] = compute_adx(df)  # ✅ 無錯版本
+    df["ADX"] = compute_adx(df)  # ✅ 不再報錯
 
     position = None
     no_trigger = True
@@ -99,7 +98,6 @@ def check_strategy():
         if pd.notna(row["ADX"]) and row["ADX"] > 20:
             signals.append("ADX > 20")
 
-        # === 買入條件：任意兩項
         if position is None and len(signals) >= 2:
             position = {
                 "Buy Price": row["Close"],
@@ -112,12 +110,10 @@ def check_strategy():
             no_trigger = False
             continue
 
-        # === 賣出條件
         if position is not None:
             buy_price = position["Buy Price"]
             gain = (row["Close"] - buy_price) / buy_price
 
-            # 止損
             if gain <= -0.075:
                 send_email("SQQQ 賣出訊號",
                            f"❌【止損】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📉 損失：{gain * 100:.1f}%",
@@ -126,7 +122,6 @@ def check_strategy():
                 no_trigger = False
                 continue
 
-            # 止盈
             if gain >= 0.10:
                 send_email("SQQQ 賣出訊號",
                            f"✅【止盈】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📈 獲利：{gain * 100:.1f}%",
@@ -135,7 +130,6 @@ def check_strategy():
                 no_trigger = False
                 continue
 
-            # EMA20連續兩日收盤突破
             if (
                 i >= 1 and
                 df["Close"].iloc[i - 1] > df["EMA20"].iloc[i - 1] and
