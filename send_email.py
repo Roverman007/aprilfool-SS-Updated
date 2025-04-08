@@ -1,15 +1,16 @@
 import os
 import smtplib
+import datetime
+import yfinance as yf
+import pandas as pd
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
-import yfinance as yf
-import pandas as pd
-import datetime
 
-# === Load Environment Variables ===
+# Load environment variables from .env (for local testing)
 load_dotenv()
 
+# === Email Settings ===
 FROM_EMAIL = os.getenv("FROM_EMAIL")
 TO_EMAIL = os.getenv("TO_EMAIL")
 APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
@@ -30,7 +31,7 @@ def send_email(subject, body, to_email):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-# === RSI ===
+# === RSI Calculation ===
 def compute_rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0).rolling(window=period).mean()
@@ -38,7 +39,7 @@ def compute_rsi(series, period=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# === MACD ===
+# === MACD Calculation ===
 def compute_macd(series):
     ema12 = series.ewm(span=12, adjust=False).mean()
     ema26 = series.ewm(span=26, adjust=False).mean()
@@ -46,7 +47,7 @@ def compute_macd(series):
     signal = macd.ewm(span=9, adjust=False).mean()
     return macd, signal
 
-# === ADX ===
+# === ADX Calculation (Fixed) ===
 def compute_adx(df, period=14):
     high = df['High']
     low = df['Low']
@@ -62,10 +63,12 @@ def compute_adx(df, period=14):
     tr2 = (high - close.shift()).abs()
     tr3 = (low - close.shift()).abs()
     tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
     atr = tr.rolling(window=period).mean()
 
     plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
     minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
+
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
     adx = dx.rolling(window=period).mean()
 
@@ -84,7 +87,7 @@ def check_strategy():
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["RSI"] = compute_rsi(df["Close"])
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
-    df["ADX"] = compute_adx(df)
+    df["ADX"] = compute_adx(df)  # ✅ Now returns a Series
 
     position = None
     no_trigger = True
@@ -140,7 +143,7 @@ def check_strategy():
             if (
                 i >= 1 and
                 df["Close"].iloc[i - 1] > df["EMA20"].iloc[i - 1] and
-                row["Close"] > df["EMA20"].iloc[i]
+                row["Close"] > df["EMA20"]
             ):
                 send_email("SQQQ 賣出訊號",
                            f"📈【EMA20突破賣出】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📌 原因：連續兩日收盤 > EMA20",
