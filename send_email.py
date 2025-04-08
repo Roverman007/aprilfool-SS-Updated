@@ -23,7 +23,7 @@ def send_email(subject, body, to_email):
     msg.attach(MIMEText(body, "plain"))
 
     try:
-        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server = smtplib.SMtplib("smtp.gmail.com", 587)
         server.starttls()
         server.login(FROM_EMAIL, APP_PASSWORD)
         server.sendmail(FROM_EMAIL, to_email, msg.as_string())
@@ -73,14 +73,15 @@ def compute_adx(df, period=14):
     adx = dx.rolling(window=period).mean()
     return pd.Series(adx.values.ravel(), index=df.index, name='ADX').astype(float)
 
-# === Strategy Logic ===
-def check_strategy():
+# === Strategy Logic for Today's Data Only ===
+def check_today_signal():
     df = yf.download("SQQQ", period="90d", interval="1d", auto_adjust=False)
 
     if df.empty or len(df) < 30:
         send_email("SQQQ 策略錯誤", "無足夠資料執行策略。", TO_EMAIL)
         return
 
+    # Add indicators
     df["EMA5"] = df["Close"].ewm(span=5).mean()
     df["EMA10"] = df["Close"].ewm(span=10).mean()
     df["EMA20"] = df["Close"].ewm(span=20).mean()
@@ -88,91 +89,40 @@ def check_strategy():
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
     df["ADX"] = compute_adx(df)
 
-    df = df[["Close", "RSI", "MACD", "Signal", "ADX", "EMA5", "EMA10", "EMA20"]].dropna()
-    today = datetime.date.today()
+    df = df.dropna().copy()
 
-    summary = {
-        "type": "No Signal",
-        "date": today,
-        "price": None,
-        "reason": "",
-    }
+    today_row = df.iloc[-1]
+    date = today_row.name.date()
+    close = today_row["Close"]
+    ema20 = today_row["EMA20"]
 
-    position = None
+    signals = []
 
-    for i in range(1, len(df)):
-        row = df.iloc[i]
-        date = row.name.date()
-        close_price = row["Close"].item()
-        ema20_price = row["EMA20"].item()
+    if today_row["RSI"] > 60:
+        signals.append("RSI > 60")
+    if today_row["MACD"] < today_row["Signal"]:
+        signals.append("MACD < Signal")
+    if today_row["EMA5"] < today_row["EMA10"]:
+        signals.append("EMA5 < EMA10")
+    if close < ema20:
+        signals.append("Close < EMA20")
+    if today_row["ADX"] > 20:
+        signals.append("ADX > 20")
 
-        signals = []
-        if row["RSI"].item() > 60:
-            signals.append("RSI > 60")
-        if row["MACD"].item() < row["Signal"].item():
-            signals.append("MACD < Signal")
-        if row["EMA5"].item() < row["EMA10"].item():
-            signals.append("EMA5 < EMA10")
-        if close_price < ema20_price:
-            signals.append("Close < EMA20")
-        if row["ADX"].item() > 20:
-            signals.append("ADX > 20")
-
-        if position is None and len(signals) >= 2:
-            summary.update({
-                "type": "Buy",
-                "date": date,
-                "price": close_price,
-                "reason": ", ".join(signals),
-            })
-            break
-
-        if position is not None:
-            buy_price = position["Buy Price"]
-            gain = (close_price - buy_price) / buy_price
-
-            if gain <= -0.075:
-                summary.update({
-                    "type": "Sell (Stop Loss)",
-                    "date": date,
-                    "price": close_price,
-                    "reason": f"Loss: {gain * 100:.1f}%",
-                })
-                break
-
-            if gain >= 0.10:
-                summary.update({
-                    "type": "Sell (Take Profit)",
-                    "date": date,
-                    "price": close_price,
-                    "reason": f"Gain: {gain * 100:.1f}%",
-                })
-                break
-
-            prev_close = df["Close"].iloc[i - 1].item()
-            prev_ema20 = df["EMA20"].iloc[i - 1].item()
-
-            if prev_close > prev_ema20 and close_price > ema20_price:
-                summary.update({
-                    "type": "Sell (EMA20 Break)",
-                    "date": date,
-                    "price": close_price,
-                    "reason": "Close > EMA20 for 2 days",
-                })
-                break
-
-    # === Send One Summary Email ===
-    if summary["type"] == "Buy":
+    # Determine signal type and send single email
+    if len(signals) >= 2:
         subject = "SQQQ 買入訊號"
-        body = f"✅【買入】\n📅 日期：{summary['date']}\n💰 價格：{summary['price']:.2f}\n📌 原因：{summary['reason']}"
-    elif summary["type"].startswith("Sell"):
-        subject = "SQQQ 賣出訊號"
-        body = f"❌【賣出】\n📅 日期：{summary['date']}\n💰 價格：{summary['price']:.2f}\n📌 原因：{summary['reason']}"
+        body = (
+            f"✅【今日買入訊號】\n"
+            f"📅 日期：{date}\n"
+            f"💰 價格：{close:.2f}\n"
+            f"📌 訊號條件：{', '.join(signals)}"
+        )
     else:
         subject = "SQQQ 無訊號"
-        body = f"📋 今天（{today}）未觸發任何買入或賣出訊號。"
+        body = f"📋 今天（{date}）未觸發任何買入或賣出訊號。"
 
     send_email(subject, body, TO_EMAIL)
 
-# === Execute ===
-check_strategy()
+# === Run Strategy for Today ===
+check_today_signal()
