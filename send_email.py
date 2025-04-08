@@ -47,7 +47,7 @@ def compute_macd(series):
     signal = macd.ewm(span=9, adjust=False).mean()
     return macd, signal
 
-# === ADX Calculation (Force Series Return) ===
+# === ADX Calculation (Safe Series Output) ===
 def compute_adx(df, period=14):
     high = df['High']
     low = df['Low']
@@ -59,10 +59,11 @@ def compute_adx(df, period=14):
     plus_dm[plus_dm < minus_dm] = 0
     minus_dm[minus_dm < plus_dm] = 0
 
-    tr1 = (high - low).abs()
-    tr2 = (high - close.shift()).abs()
-    tr3 = (low - close.shift()).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    tr = pd.concat([
+        (high - low).abs(),
+        (high - close.shift()).abs(),
+        (low - close.shift()).abs()
+    ], axis=1).max(axis=1)
 
     atr = tr.rolling(window=period).mean()
 
@@ -72,7 +73,8 @@ def compute_adx(df, period=14):
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
     adx = dx.rolling(window=period).mean()
 
-    return pd.Series(adx.values, index=df.index, name="ADX")
+    adx.name = "ADX"
+    return adx  # Ensure it's a 1D Series
 
 # === Main Strategy ===
 def check_strategy():
@@ -87,7 +89,7 @@ def check_strategy():
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["RSI"] = compute_rsi(df["Close"])
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
-    df["ADX"] = compute_adx(df)  # ✅ Guaranteed to be a 1D Series now
+    df["ADX"] = compute_adx(df)
 
     position = None
     no_trigger = True
