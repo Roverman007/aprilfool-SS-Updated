@@ -94,7 +94,9 @@ def check_strategy():
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
     df["ADX"] = compute_adx(df)
 
-    df = df.dropna(subset=["RSI", "MACD", "Signal", "ADX", "EMA5", "EMA10", "EMA20"])
+    required_columns = ["RSI", "MACD", "Signal", "ADX", "EMA5", "EMA10", "EMA20"]
+    df = df[[col for col in required_columns if col in df.columns]]
+    df.dropna(inplace=True)
 
     position = None
     no_trigger = True
