@@ -42,7 +42,7 @@ def compute_macd(series):
     signal = macd.ewm(span=9, adjust=False).mean()
     return macd, signal
 
-# === ADX ===
+# ✅ === ADX（修正回傳為 Series）===
 def compute_adx(df, period=14):
     high = df['High']
     low = df['Low']
@@ -62,7 +62,7 @@ def compute_adx(df, period=14):
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
     adx = dx.rolling(window=period).mean()
 
-    return pd.DataFrame({"ADX": adx})  # ✅ 回傳 DataFrame，但主程式中取單欄位
+    return adx  # ✅ 回傳 Series，安全賦值到 df["ADX"]
 
 # === 主策略 ===
 def check_strategy():
@@ -77,7 +77,7 @@ def check_strategy():
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["RSI"] = compute_rsi(df["Close"])
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
-    df["ADX"] = compute_adx(df)["ADX"]  # ✅ 修正這裡：只取出單欄位
+    df["ADX"] = compute_adx(df)  # ✅ 現在已經穩定
 
     position = None
     no_trigger = True
