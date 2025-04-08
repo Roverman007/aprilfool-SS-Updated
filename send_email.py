@@ -1,5 +1,6 @@
 import os
 import smtplib
+import json
 import datetime
 import yfinance as yf
 import pandas as pd
@@ -10,6 +11,7 @@ from email.mime.multipart import MIMEMultipart
 FROM_EMAIL = "roverpoonhkg@gmail.com"
 TO_EMAIL = "klauspoon@gmail.com"
 APP_PASSWORD = "rbmk opks bdex ajzr"
+POSITION_FILE = "position.json"
 
 def send_email(subject, body, to_email):
     if not FROM_EMAIL or not TO_EMAIL or not APP_PASSWORD:
@@ -32,7 +34,7 @@ def send_email(subject, body, to_email):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-# === RSI 計算 ===
+# === 技術指標 ===
 def compute_rsi(series, period=14):
     delta = series.diff()
     gain = delta.clip(lower=0).rolling(window=period).mean()
@@ -40,7 +42,6 @@ def compute_rsi(series, period=14):
     rs = gain / loss
     return (100 - (100 / (1 + rs))).astype(float)
 
-# === MACD 計算 ===
 def compute_macd(series):
     ema12 = series.ewm(span=12, adjust=False).mean()
     ema26 = series.ewm(span=26, adjust=False).mean()
@@ -48,7 +49,6 @@ def compute_macd(series):
     signal = macd.ewm(span=9, adjust=False).mean()
     return macd.astype(float), signal.astype(float)
 
-# === ADX 計算 ===
 def compute_adx(df, period=14):
     high = df['High']
     low = df['Low']
@@ -75,8 +75,8 @@ def compute_adx(df, period=14):
     adx = dx.rolling(window=period).mean()
     return pd.Series(adx.values.ravel(), index=df.index, name='ADX').astype(float)
 
-# === 主策略：分析最新一支5分鐘K線 ===
-def check_intraday_signal():
+# === 主策略 ===
+def check_intraday_strategy():
     df = yf.download("SQQQ", period="2d", interval="5m", prepost=True)
 
     if df.empty or len(df) < 50:
@@ -118,23 +118,49 @@ def check_intraday_signal():
     if ema5 < ema10:
         signals.append("EMA5 < EMA10")
     if close < ema20:
-        signals.append("Close < EMA20")
+        signals.append("Close < EMA20 (即時)")
     if adx > 20:
         signals.append("ADX > 20")
 
-    if len(signals) >= 2:
-        subject = "📈 SQQQ 即時買入訊號"
-        body = (
-            f"✅【5分鐘級別 買入訊號】\n"
-            f"🕒 時間：{timestamp}\n"
-            f"💰 價格：{close:.2f}\n"
-            f"📌 訊號條件：{', '.join(signals)}"
-        )
-    else:
-        subject = "SQQQ 無即時訊號"
-        body = f"📋 {timestamp} 沒有觸發任何買入或賣出訊號。"
+    # === 檢查持倉紀錄 ===
+    position = None
+    if os.path.exists(POSITION_FILE):
+        with open(POSITION_FILE) as f:
+            position = json.load(f)
 
-    send_email(subject, body, TO_EMAIL)
+    # === 賣出策略 ===
+    if position:
+        buy_price = position["buy_price"]
+        gain = (close - buy_price) / buy_price
+        if gain <= -0.075:
+            send_email("❌ SQQQ 止損賣出",
+                       f"❌【止損】\n🕒 時間：{timestamp}\n💰 價格：{close:.2f}\n📉 損失：{gain*100:.1f}%",
+                       TO_EMAIL)
+            os.remove(POSITION_FILE)
+            return
+        elif gain >= 0.10:
+            send_email("✅ SQQQ 止盈賣出",
+                       f"✅【止盈】\n🕒 時間：{timestamp}\n💰 價格：{close:.2f}\n📈 獲利：{gain*100:.1f}%",
+                       TO_EMAIL)
+            os.remove(POSITION_FILE)
+            return
+
+    # === 買入策略 ===
+    if not position and len(signals) >= 2:
+        new_position = {
+            "symbol": "SQQQ",
+            "buy_price": close,
+            "buy_time": str(timestamp),
+            "reason": ", ".join(signals)
+        }
+        with open(POSITION_FILE, "w") as f:
+            json.dump(new_position, f)
+
+        send_email("📈 SQQQ 即時買入訊號",
+                   f"✅【5分鐘級別 買入訊號】\n🕒 時間：{timestamp}\n💰 價格：{close:.2f}\n📌 訊號條件：{new_position['reason']}",
+                   TO_EMAIL)
+    elif not position:
+        send_email("SQQQ 無即時訊號", f"📋 {timestamp} 沒有觸發任何買入或賣出訊號。", TO_EMAIL)
 
 # === 執行策略 ===
-check_intraday_signal()
+check_intraday_strategy()
