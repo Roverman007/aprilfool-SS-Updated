@@ -47,7 +47,7 @@ def compute_macd(series):
     signal = macd.ewm(span=9, adjust=False).mean()
     return macd, signal
 
-# === ADX Calculation (Return Only 1 Column) ===
+# === ADX Calculation (Stable 1D Series) ===
 def compute_adx(df, period=14):
     high = df['High']
     low = df['Low']
@@ -66,12 +66,17 @@ def compute_adx(df, period=14):
 
     atr = tr.rolling(window=period).mean()
 
-    plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
-    minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
+    plus_di = plus_dm.rolling(window=period).mean()
+    minus_di = minus_dm.rolling(window=period).mean()
 
-    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
-    adx_series = dx.rolling(window=period).mean()
-    return pd.Series(adx_series, index=df.index, name="ADX")
+    sum_di = plus_di + minus_di
+    sum_di[sum_di == 0] = 1e-10
+
+    dx = 100 * (plus_di - minus_di).abs() / sum_di
+    adx = dx.rolling(window=period).mean()
+
+    adx = pd.Series(adx.values.ravel(), index=df.index, name='ADX')
+    return adx
 
 # === Main Strategy ===
 def check_strategy():
@@ -86,7 +91,7 @@ def check_strategy():
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["RSI"] = compute_rsi(df["Close"])
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
-    df["ADX"] = compute_adx(df)  # Final fix, confirmed 1-column Series
+    df["ADX"] = compute_adx(df)
 
     position = None
     no_trigger = True
