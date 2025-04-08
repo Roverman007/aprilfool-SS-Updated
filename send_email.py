@@ -1,14 +1,18 @@
+import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from dotenv import load_dotenv
 import yfinance as yf
 import pandas as pd
 import datetime
 
-# === Email 設定 ===
-FROM_EMAIL = "roverpoonhkg@gmail.com"
-TO_EMAIL = "klauspoon@gmail.com"
-APP_PASSWORD = "phly lbfi yayh glut"
+# === Load Environment Variables ===
+load_dotenv()
+
+FROM_EMAIL = os.getenv("FROM_EMAIL")
+TO_EMAIL = os.getenv("TO_EMAIL")
+APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
 
 def send_email(subject, body, to_email):
     msg = MIMEMultipart()
@@ -42,7 +46,7 @@ def compute_macd(series):
     signal = macd.ewm(span=9, adjust=False).mean()
     return macd, signal
 
-# ✅ === ADX（修正回傳為 Series）===
+# === ADX ===
 def compute_adx(df, period=14):
     high = df['High']
     low = df['Low']
@@ -62,9 +66,9 @@ def compute_adx(df, period=14):
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
     adx = dx.rolling(window=period).mean()
 
-    return adx  # ✅ 回傳 Series，安全賦值到 df["ADX"]
+    return pd.Series(adx, index=df.index, name="ADX")
 
-# === 主策略 ===
+# === Main Strategy ===
 def check_strategy():
     df = yf.download("SQQQ", period="90d", interval="1d", auto_adjust=False)
 
@@ -77,7 +81,7 @@ def check_strategy():
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["RSI"] = compute_rsi(df["Close"])
     df["MACD"], df["Signal"] = compute_macd(df["Close"])
-    df["ADX"] = compute_adx(df)  # ✅ 現在已經穩定
+    df["ADX"] = compute_adx(df)
 
     position = None
     no_trigger = True
@@ -145,5 +149,5 @@ def check_strategy():
         today = datetime.date.today()
         send_email("SQQQ 無訊號", f"📋 今天（{today}）未觸發任何買入或賣出訊號。", TO_EMAIL)
 
-# === 執行策略 ===
+# === Execute ===
 check_strategy()
