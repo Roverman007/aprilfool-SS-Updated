@@ -20,12 +20,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install yfinance pandas
+          pip install pandas yfinance python-dotenv  # Directly install dependencies here
 
       - name: Run SQQQ strategy
         run: python send_email.py
-
-              - name: Install dependencies
-        run: |
-          pip install -r requirements.txt  # Install from requirements.txt
-
