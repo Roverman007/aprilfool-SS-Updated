@@ -73,7 +73,7 @@ def compute_adx(df, period=14):
     adx = dx.rolling(window=period).mean()
     return pd.Series(adx.values.ravel(), index=df.index, name='ADX').astype(float)
 
-# === Today's Strategy ===
+# === Main Strategy (One Day Only: Today) ===
 def check_today_signal():
     df = yf.download("SQQQ", period="90d", interval="1d", auto_adjust=False)
 
@@ -81,6 +81,7 @@ def check_today_signal():
         send_email("SQQQ 策略錯誤", "無足夠資料執行策略。", TO_EMAIL)
         return
 
+    # Add indicators
     df["EMA5"] = df["Close"].ewm(span=5).mean()
     df["EMA10"] = df["Close"].ewm(span=10).mean()
     df["EMA20"] = df["Close"].ewm(span=20).mean()
@@ -93,19 +94,18 @@ def check_today_signal():
         send_email("SQQQ 策略錯誤", "技術指標計算後資料為空。", TO_EMAIL)
         return
 
-    # Use last row as a Series
-    latest = df.iloc[-1]
-    date = latest.name.date()
+    last_idx = df.index[-1]
+    date = last_idx.date()
 
-    # Extract scalars directly
-    close = latest["Close"]
-    ema5 = latest["EMA5"]
-    ema10 = latest["EMA10"]
-    ema20 = latest["EMA20"]
-    rsi = latest["RSI"]
-    macd = latest["MACD"]
-    signal = latest["Signal"]
-    adx = latest["ADX"]
+    # ✅ Use .at to extract scalars from DataFrame (bulletproof)
+    rsi = df.at[last_idx, "RSI"]
+    macd = df.at[last_idx, "MACD"]
+    signal = df.at[last_idx, "Signal"]
+    ema5 = df.at[last_idx, "EMA5"]
+    ema10 = df.at[last_idx, "EMA10"]
+    ema20 = df.at[last_idx, "EMA20"]
+    close = df.at[last_idx, "Close"]
+    adx = df.at[last_idx, "ADX"]
 
     signals = []
     if rsi > 60:
@@ -133,5 +133,5 @@ def check_today_signal():
 
     send_email(subject, body, TO_EMAIL)
 
-# === Execute ===
+# === Run Today’s Strategy ===
 check_today_signal()
