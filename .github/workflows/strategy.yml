@@ -1,14 +1,13 @@
-name: SQQQ Strategy Daily Alert
+name: SQQQ Intraday Strategy
 
 on:
   schedule:
-    - cron: '59 3 * * *'  # 每天 11:59 AM 香港時間 (UTC+8)
-  workflow_dispatch:      # 可手動執行
+    - cron: '0 15 * * *'  # 香港時間 11PM
+  workflow_dispatch:
 
 jobs:
   run-strategy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -20,7 +19,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pandas yfinance python-dotenv  # Directly install dependencies here
+          pip install yfinance pandas
 
-      - name: Run SQQQ strategy
+      - name: Run Intraday Strategy
         run: python send_email.py
