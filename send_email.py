@@ -73,7 +73,7 @@ def compute_adx(df, period=14):
     adx = dx.rolling(window=period).mean()
     return pd.Series(adx.values.ravel(), index=df.index, name='ADX').astype(float)
 
-# === Main Strategy (One Day Only: Today) ===
+# === Main Strategy for Today ===
 def check_today_signal():
     df = yf.download("SQQQ", period="90d", interval="1d", auto_adjust=False)
 
@@ -81,7 +81,6 @@ def check_today_signal():
         send_email("SQQQ 策略錯誤", "無足夠資料執行策略。", TO_EMAIL)
         return
 
-    # Add indicators
     df["EMA5"] = df["Close"].ewm(span=5).mean()
     df["EMA10"] = df["Close"].ewm(span=10).mean()
     df["EMA20"] = df["Close"].ewm(span=20).mean()
@@ -97,15 +96,15 @@ def check_today_signal():
     last_idx = df.index[-1]
     date = last_idx.date()
 
-    # ✅ Use .at to extract scalars from DataFrame (bulletproof)
-    rsi = df.at[last_idx, "RSI"]
-    macd = df.at[last_idx, "MACD"]
-    signal = df.at[last_idx, "Signal"]
-    ema5 = df.at[last_idx, "EMA5"]
-    ema10 = df.at[last_idx, "EMA10"]
-    ema20 = df.at[last_idx, "EMA20"]
-    close = df.at[last_idx, "Close"]
-    adx = df.at[last_idx, "ADX"]
+    # ✅ Use .loc to ensure clean scalar access
+    rsi = df.loc[last_idx, "RSI"]
+    macd = df.loc[last_idx, "MACD"]
+    signal = df.loc[last_idx, "Signal"]
+    ema5 = df.loc[last_idx, "EMA5"]
+    ema10 = df.loc[last_idx, "EMA10"]
+    ema20 = df.loc[last_idx, "EMA20"]
+    close = df.loc[last_idx, "Close"]
+    adx = df.loc[last_idx, "ADX"]
 
     signals = []
     if rsi > 60:
@@ -133,5 +132,5 @@ def check_today_signal():
 
     send_email(subject, body, TO_EMAIL)
 
-# === Run Today’s Strategy ===
+# === Execute Strategy ===
 check_today_signal()
