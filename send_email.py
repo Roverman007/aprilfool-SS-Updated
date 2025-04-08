@@ -60,11 +60,12 @@ def compute_adx(df, period=14):
     plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
     minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
-    return dx.rolling(window=period).mean()
+    adx = dx.rolling(window=period).mean()
+    return adx  # 確保只回傳 Series
 
 # === 主策略邏輯 ===
 def check_strategy():
-    df = yf.download("SQQQ", period="60d", interval="1d", auto_adjust=False)
+    df = yf.download("SQQQ", period="90d", interval="1d", auto_adjust=False)
 
     if df.empty or len(df) < 30:
         send_email("SQQQ 策略錯誤", "無足夠資料執行策略。", TO_EMAIL)
@@ -87,7 +88,7 @@ def check_strategy():
 
         signals = []
 
-        # === 買入條件（滿足任兩項）
+        # === 買入條件（任選2項）
         if row["RSI"] > 60:
             signals.append("RSI > 60")
         if row["MACD"] < row["Signal"]:
@@ -111,49 +112,45 @@ def check_strategy():
                        f"✅ 【買入】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📌 原因：{position['Buy Reason']}",
                        TO_EMAIL)
             no_trigger = False
-            continue  # 當天已買入，不賣出
+            continue  # 避免當天同時賣出
 
         # === 賣出條件
         if position is not None:
             buy_price = position["Buy Price"]
             gain = (row["Close"] - buy_price) / buy_price
 
-            # 止損 -7.5%
             if gain <= -0.075:
                 send_email("SQQQ 賣出訊號",
-                           f"❌ 【賣出止損】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📉 損失：{gain * 100:.1f}%",
+                           f"❌ 【止損】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📉 損失：{gain * 100:.1f}%",
                            TO_EMAIL)
                 position = None
                 no_trigger = False
                 continue
 
-            # 止盈 +10%
             if gain >= 0.10:
                 send_email("SQQQ 賣出訊號",
-                           f"✅ 【賣出止盈】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📈 獲利：{gain * 100:.1f}%",
+                           f"✅ 【止盈】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📈 獲利：{gain * 100:.1f}%",
                            TO_EMAIL)
                 position = None
                 no_trigger = False
                 continue
 
-            # 收盤連續兩天站上 EMA20
             if (
                 i >= 1
                 and df["Close"].iloc[i - 1] > df["EMA20"].iloc[i - 1]
                 and row["Close"] > row["EMA20"]
             ):
                 send_email("SQQQ 賣出訊號",
-                           f"📈 【賣出】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📌 原因：連續兩日收盤 > EMA20",
+                           f"📈 【賣出】\n📅 日期：{date}\n💰 價格：{row['Close']:.2f}\n📌 原因：連續2日收盤 > EMA20",
                            TO_EMAIL)
                 position = None
                 no_trigger = False
 
-    # === 沒有觸發任何交易
     if no_trigger:
         today = datetime.date.today()
         send_email("SQQQ 無訊號",
                    f"📋 今天（{today}）未觸發任何買入或賣出訊號。",
                    TO_EMAIL)
 
-# === 開始執行策略 ===
+# === 執行策略 ===
 check_strategy()
