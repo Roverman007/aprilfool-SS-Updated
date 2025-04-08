@@ -93,18 +93,22 @@ def check_today_signal():
         send_email("SQQQ 策略錯誤", "技術指標計算後資料為空。", TO_EMAIL)
         return
 
-    last_idx = df.index[-1]
-    date = last_idx.date()
+    # Get the last row as a Series
+    row = df.iloc[-1]
+    date = row.name.date()
 
-    # ✅ Use .loc to ensure clean scalar access
-    rsi = df.loc[last_idx, "RSI"]
-    macd = df.loc[last_idx, "MACD"]
-    signal = df.loc[last_idx, "Signal"]
-    ema5 = df.loc[last_idx, "EMA5"]
-    ema10 = df.loc[last_idx, "EMA10"]
-    ema20 = df.loc[last_idx, "EMA20"]
-    close = df.loc[last_idx, "Close"]
-    adx = df.loc[last_idx, "ADX"]
+    # Safely extract scalar values using .item() only if needed
+    def safe_scalar(val):
+        return val.item() if isinstance(val, pd.Series) else val
+
+    rsi = safe_scalar(row["RSI"])
+    macd = safe_scalar(row["MACD"])
+    signal = safe_scalar(row["Signal"])
+    ema5 = safe_scalar(row["EMA5"])
+    ema10 = safe_scalar(row["EMA10"])
+    ema20 = safe_scalar(row["EMA20"])
+    close = safe_scalar(row["Close"])
+    adx = safe_scalar(row["ADX"])
 
     signals = []
     if rsi > 60:
